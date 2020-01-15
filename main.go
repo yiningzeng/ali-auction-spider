@@ -12,17 +12,19 @@ import (
     _ "github.com/lib/pq"
     "github.com/sony/sonyflake"
     "strings"
+    "sync"
     "time"
 )
 var sf *sonyflake.Sonyflake
-
+var o orm.Ormer
 
 type MyPageProcesser struct {
-    startNewsId int
+    target AuctionTarget
 }
 
 type AuctionItem struct {
     Id int64 `orm:"column(id);pk"`
+    AuctionTarget  *AuctionTarget `orm:"rel(fk)"`    //设置一对多关系
     MnNotice bool `json:"mnNotice"` // mysql 可以使用这种方式`json:"mnNotice" orm:"description(注释)"`注释 但是postgresql不行
     Credit bool `json:"credit"`
     ItemUrl string `json:"itemUrl"`
@@ -51,16 +53,13 @@ type AuctionItem struct {
     UpdateTime time.Time
 }
 // Model Struct
-type AuctionTargetUrl struct {
+type AuctionTarget struct {
     Id uint64 `orm:"pk"`
+    AuctionItem []*AuctionItem `orm:"reverse(many)"` // 设置一对多的反向关系
+    Category string
     Url string
-    Status bool `orm:"default(true)"`
-    CreateTime time.Time
-}
-
-type AuctionCity struct {
-    Id uint64 `orm:"pk"`
-    City string
+    CityOrLocation string // 城市或者区 主要是为了对应拍卖记录的位置信息 可以设置为 宁波>鄞州
+    Available bool `orm:"default(true)"`
     CreateTime time.Time
 }
 
@@ -74,21 +73,22 @@ func init() {
     //// create table
     //orm.RunSyncdb("default", false, true)
 
-    orm.RegisterDriver("postgres", orm.DRPostgres)
+    _ = orm.RegisterDriver("postgres", orm.DRPostgres)
 
-    orm.RegisterDataBase("default", "postgres", "postgres://postgres:baymin1024@rest.yining.site/spider?sslmode=disable")
+    _ = orm.RegisterDataBase("default", "postgres", "postgres://postgres:baymin1024@rest.yining.site/spider?sslmode=disable")
 
-    orm.RegisterModel(new(AuctionTargetUrl), new(AuctionItem))
+    orm.RegisterModel(new(AuctionTarget), new(AuctionItem))
     // create table
-    orm.RunSyncdb("default", false, true)
+    _ = orm.RunSyncdb("default", false, true)
 
     sf = sonyflake.NewSonyflake(sonyflake.Settings{})
     if sf == nil {
         fmt.Printf("sonyflake not created")
     }
+    o = orm.NewOrm()
 }
-func NewMyPageProcesser() *MyPageProcesser {
-    return &MyPageProcesser{}
+func NewMyPageProcesser(auc AuctionTarget) *MyPageProcesser {
+    return &MyPageProcesser{target:auc}
 }
 
 // Parse html dom here and record the parse result that we want to crawl.
@@ -123,10 +123,11 @@ func (this *MyPageProcesser) Process(p *page.Page) {
         var json = jsoniter.ConfigCompatibleWithStandardLibrary
         json.Unmarshal([]byte(jsoniter.Get([]byte(jsonStr), "data").ToString()), &bb)
 
-        o := orm.NewOrm()
+
 
         for i:=0; i<len(bb);i++  {
             bb[i].UpdateTime = time.Unix(bb[i].Start/1000, 0)
+            bb[i].AuctionTarget = &this.target
             _, e := o.Insert(&bb[i])
             if e!=nil && strings.Contains(e.Error(), "duplicate key value violates unique constraint") {
                 // handle error
@@ -177,14 +178,34 @@ func main() {
         fmt.Println(err)
     }
     fmt.Println("sonyflake: %d", id)
-    spider.NewSpider(NewMyPageProcesser(), "fuck").
-       AddUrl("https://sf.taobao.com/item_list.htm?city=%C4%FE%B2%A8&category=50025969", "html"). // start url, html is the responce type ("html" or "json" or "jsonp" or "text")
-       AddPipeline(pipeline.NewPipelineConsole()).                                                                                   // Print result to std output
-       AddPipeline(pipeline.NewPipelineFile("/tmp/sinafile")).                                                                       // Print result in file
-       OpenFileLog("/tmp").                                                                                                          // Error info or other useful info in spider will be logged in file of defalt path like "WD/log/log.2014-9-1".
-       SetSleepTime("rand", 1000, 3000).                                                                                             // Sleep time between 1s and 3s.
-       SetThreadnum(10).
-       Run()
+
+    var targets []*AuctionTarget
+    num, err := o.QueryTable("auction_target").Filter("available", true).All(&targets)
+    fmt.Printf("Returned Rows Num: %d, %s", num, err)
+    if err == orm.ErrNoRows {
+        // 没有找到记录
+        fmt.Printf("Not row found")
+    } else {
+        fmt.Printf("开始执行")
+        var wg sync.WaitGroup
+        for i:=0; i < len(targets); i++ {
+            wg.Add(1)
+            fmt.Printf("%v", targets[i])
+
+            //_, _ = o.LoadRelated(targets[i],"AuctionItem") // 这里把一对多的数据也加载出来
+
+            go spider.NewSpider(NewMyPageProcesser(*targets[i]), "fuck").
+                AddUrl(targets[i].Url, "html"). // start url, html is the responce type ("html" or Crawled result"json" or "jsonp" or "text")
+                AddPipeline(pipeline.NewPipelineConsole()).                                                                                   // Print result to std output
+                AddPipeline(pipeline.NewPipelineFile("/tmp/ali-auction-spider")).                                                                       // Print result in file
+                OpenFileLog("/tmp").                                                                                                          // Error info or other useful info in spider will be logged in file of defalt path like "WD/log/log.2014-9-1".
+                SetSleepTime("rand", 1000, 3000).                                                                                             // Sleep time between 1s and 3s.
+                SetThreadnum(10).
+                Run()
+        }
+        wg.Wait()
+        fmt.Printf("执行结束")
+    }
 
     // 定义一个cron运行器
 
