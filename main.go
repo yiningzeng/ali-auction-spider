@@ -100,6 +100,19 @@ func (this *MyPageProcesser) Process(p *page.Page) {
     }
 
     query := p.GetHtmlParser()
+
+    query.Find(".J_Pagination").Each(func(i int, selection *goquery.Selection) {
+        selection.Find(".next").Each(func(i int, se *goquery.Selection) {
+            href, b :=se.Attr("href")
+            if b{
+                fmt.Println("每页%s", strings.TrimSpace(href))
+                p.AddTargetRequest("https:" + strings.TrimSpace(href), "html")
+            }
+        })
+    })
+
+
+
     query.Find("#sf-item-list-data").Each(func(i int, s *goquery.Selection) {
 
         jsonStr := s.Text()
