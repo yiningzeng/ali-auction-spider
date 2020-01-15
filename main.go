@@ -128,6 +128,18 @@ func (this *MyPageProcesser) Process(p *page.Page) {
         for i:=0; i<len(bb);i++  {
             bb[i].UpdateTime = time.Unix(bb[i].Start/1000, 0)
             bb[i].AuctionTarget = &this.target
+
+            itemUrl := strings.TrimSpace(bb[i].ItemUrl)
+            if !strings.Contains(itemUrl, "https:"){
+                itemUrl = "https:" + itemUrl
+                bb[i].ItemUrl = itemUrl
+            }
+            picUrl := strings.TrimSpace(bb[i].PicUrl)
+            if !strings.Contains(picUrl, "https:"){
+                picUrl = "https:" + picUrl
+                bb[i].PicUrl = picUrl
+            }
+
             _, e := o.Insert(&bb[i])
             if e!=nil && strings.Contains(e.Error(), "duplicate key value violates unique constraint") {
                 // handle error
