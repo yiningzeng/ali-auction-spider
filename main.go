@@ -126,13 +126,13 @@ func (this *MyPageProcesser) Process(p *page.Page) {
         o := orm.NewOrm()
 
         for i:=0; i<len(bb);i++  {
-            bb[i].UpdateTime = time.Now()
-            uid, e := o.Insert(&bb[i])
+            bb[i].UpdateTime = time.Unix(bb[i].Start/1000, 0)
+            _, e := o.Insert(&bb[i])
             if e!=nil && strings.Contains(e.Error(), "duplicate key value violates unique constraint") {
                 // handle error
                 _, _ = o.Update(&bb[i])
             }
-            fmt.Printf("UID: %d, ERR: %v\n", uid, e)
+            //fmt.Printf("UID: %d, ERR: %v\n", uid, e)
         }
         //json := goquery.NewDocumentFromReader(strin)
     })
@@ -144,6 +144,8 @@ func (this *MyPageProcesser) Finish() {
 }
 
 func main() {
+    xa := time.Unix(1577066400000/1000, 0)
+    fmt.Printf(xa.String())
     //s := Student{"xiaoming",10,4}
     //
     //result, err := json.Marshal(s)
