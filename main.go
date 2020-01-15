@@ -10,9 +10,11 @@ import (
     "github.com/hu17889/go_spider/core/spider"
     "github.com/json-iterator/go"
     _ "github.com/lib/pq"
+    "github.com/sony/sonyflake"
     "strings"
     "time"
 )
+var sf *sonyflake.Sonyflake
 type MyPageProcesser struct {
     startNewsId int
 }
@@ -71,6 +73,10 @@ func init() {
     orm.RegisterModel(new(User), new(Item))
     // create table
     orm.RunSyncdb("default", false, true)
+    sf = sonyflake.NewSonyflake(sonyflake.Settings{})
+    if sf == nil {
+        fmt.Printf("sonyflake not created")
+    }
 }
 func NewMyPageProcesser() *MyPageProcesser {
     return &MyPageProcesser{}
@@ -128,12 +134,32 @@ func main() {
     //
     //fmt.Println(*stu)
 
+    //iad, _ := sf.NextID()
+    //tar := TargetUrl{Id: iad, Url: bb[i].ItemUrl, Status:true, CreateTime: time.Now()}
+    //uid, e := o.Insert(&tar)
+
+    id, err := sf.NextID()
+    if err != nil {
+        fmt.Println(err)
+    }
+    fmt.Println("sonyflake: %d", id)
+    id, err = sf.NextID()
+    if err != nil {
+        fmt.Println(err)
+    }
+    fmt.Println("sonyflake: %d", id)
+    id, err = sf.NextID()
+    if err != nil {
+        fmt.Println(err)
+    }
+    fmt.Println("sonyflake: %d", id)
     spider.NewSpider(NewMyPageProcesser(), "fuck").
        AddUrl("https://sf.taobao.com/item_list.htm?city=%C4%FE%B2%A8&category=50025969", "html"). // start url, html is the responce type ("html" or "json" or "jsonp" or "text")
        AddPipeline(pipeline.NewPipelineConsole()).                                                                                   // Print result to std output
        AddPipeline(pipeline.NewPipelineFile("/tmp/sinafile")).                                                                       // Print result in file
        OpenFileLog("/tmp").                                                                                                          // Error info or other useful info in spider will be logged in file of defalt path like "WD/log/log.2014-9-1".
        SetSleepTime("rand", 1000, 3000).                                                                                             // Sleep time between 1s and 3s.
+       SetThreadnum(10).
        Run()
 
     // 定义一个cron运行器
