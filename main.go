@@ -17,6 +17,7 @@ import (
 )
 var sf *sonyflake.Sonyflake
 var o orm.Ormer
+var wg sync.WaitGroup
 
 type MyPageProcesser struct {
     target AuctionTarget
@@ -154,6 +155,7 @@ func (this *MyPageProcesser) Process(p *page.Page) {
 
 func (this *MyPageProcesser) Finish() {
     fmt.Printf("TODO:before end spider \r\n")
+    wg.Done()
 }
 
 func main() {
@@ -199,11 +201,11 @@ func main() {
         fmt.Printf("Not row found")
     } else {
         fmt.Printf("开始执行")
-        var wg sync.WaitGroup
-        for i:=0; i < len(targets); i++ {
-            wg.Add(1)
-            fmt.Printf("%v", targets[i])
 
+        for i:=0; i < len(targets); i++ {
+            //wg.Add(1)
+            fmt.Printf("%v", targets[i])
+            wg.Add(1)
             //_, _ = o.LoadRelated(targets[i],"AuctionItem") // 这里把一对多的数据也加载出来
 
             go spider.NewSpider(NewMyPageProcesser(*targets[i]), "fuck").
